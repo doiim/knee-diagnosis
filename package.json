@@ -1,0 +1,21 @@
+{
+  "name": "alliar-knee-preditor",
+  "version": "1.0.0",
+  "description": "Preditor for knee diagnosis",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Guilherme Lopes <guilherme@doiim.com>",
+  "license": "ISC",
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.2",
+    "express": "^4.16.4",
+    "helmet": "^3.16.0",
+    "mongoose": "^5.4.20",
+    "node-schedule": "^1.3.2",
+    "pug": "^2.0.3",
+    "q": "^1.5.1",
+    "queue": "^6.0.1"
+  }
+}
