@@ -138,6 +138,22 @@ function SaveAllDiagnosis(){
 	});
 }
 
+function PrintDiagnosisOnFile(){
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		var result='';
+		diagnosis.forEach(function(diag){
+			diag.resultadoTxt.forEach(function(line){
+				result += line+'\n';
+			});
+			result += '\n\n*********************************************************\n\n'
+		});
+		fs.writeFile("./data/allDiags.txt", result , function(err) {
+			if(err) return console.error('Error saving diagnosis file: ' + err);
+		});
+	});
+}
+
 SaveAllDiagnosis();
 
 /*
