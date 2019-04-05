@@ -1,0 +1,44 @@
+block title
+    title Add and Remove Tokens
+
+block content
+    script(src="https://cdn.socket.io/socket.io-1.4.5.js")
+    script.
+        var socket = io.connect('http://localhost:5001/');
+        function remove(str){
+            console.log("Removing "+str);
+            document.getElementById(str).remove();
+            socket.emit('removeToken', str);
+        }
+        function add(){
+            var str = document.getElementById("input-form").value;
+            document.getElementById("input-form").value="";
+            console.log("Adding "+str);
+
+            var spam = document.createElement("spam");
+            spam.innerHTML = str;
+            var button = document.createElement("button");
+            button.setAttribute( "onClick", "remove('"+str+"')" );
+            button.innerHTML = "x"; 
+
+            var div = document.createElement("div");
+            div.id = str;  
+
+            div.appendChild(spam);
+            spam.appendChild(button);
+            document.getElementById("all-divs").appendChild(div);
+
+            socket.emit('addToken', str);
+        }
+    div(id="all-divs")
+        for t in tokens
+            <div id= "#{ t }">
+                spam #{ t } <button onclick="remove('#{ t }')">x</button>
+            </div>
+
+    p Add Token:
+    <input type="text" id="input-form" onchange="add()"><br>
+    p ------------------------------------ 
+    div
+        for p in phrases
+            spam #{ p }<br>

@@ -20,12 +20,10 @@ var DiagnosisSchema   = new Schema({
 	tokenList: [String],
 	symptomList: [String],
 	resultList: [String]
-    // id: { type : String , unique : true, dropDups: true },
-	// structure: [{type: Schema.Types.Mixed, default: {}}],		// MARCAR .markModified('externalJSON') para atualizar
-
+   
 });
 
-module.exports = mongoose.model('Diagnosis', DiagnosisSchema);
+module.exports = mongoose.model('diagnosis', DiagnosisSchema);
 
 /*    --------_Example Data ---------
 [ "RESSONÂNCIA MAGNÉTICA DO JOELHO ESQUERDO",
