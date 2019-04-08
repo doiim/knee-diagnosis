@@ -199,11 +199,17 @@ block content
             socket.emit('sendClassification', JSON.stringify(result));
         }
 
+        function search(){
+            var searchDOM = document.getElementById("search");
+            window.location.href += "&strFilter="+searchDOM.value;
+        }
+
     div
         if page > 0
             a(style="text-align: center;width: 50%;height: 40px;float: left;" href='/classify/?page='+(page-1)) PREVIOUS PAGE
         if page < totalPages
             a(style="text-align: center;width: 50%;height: 40px;float: right;" href='/classify/?page='+(page+1)) NEXT PAGE
+    <input type="text" id="search" onchange="search()"><br>
     div
         for diag in diagnosis
             - var color="beige";

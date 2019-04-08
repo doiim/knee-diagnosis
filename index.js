@@ -36,15 +36,21 @@ app.get('/tokens/', function (req, res) {
 	MongoUtils.getAllDiagnosis()
 	.then(function(diagnosis){
 		var phrases=[];
+		var classFilter = req.query.classFilter;
+		if(classFilter==undefined)
+			classFilter=1;
+		var maxPhrases = req.query.maxPhrases;
+		if(maxPhrases==undefined)
+			maxPhrases=1;
 		for(var i=0;i<diagnosis.length;i++)
 		{
 			var diag = diagnosis[i];
 			diag.resultadoTxt.forEach(function(line){
-				if(!classifier.getBestClassification(line) || classifier.getBestClassification(line).value < 0.9){
+				if(!classifier.getBestClassification(line) || classifier.getBestClassification(line).value < classFilter){
 					phrases.push(line);
 				}
 			});
-			if(phrases.length > 100){
+			if(phrases.length > maxPhrases){
 				break;
 			}
 		}
@@ -59,32 +65,71 @@ app.get('/classify/', function(req, res) {
 			page=0;
 		
 		var classFilter = req.query.classFilter;
-			if(classFilter==undefined)
+		if(classFilter==undefined)
 			classFilter=1;
+
+		var strFilter = req.query.strFilter;
+		if(strFilter==undefined)
+			strFilter="";
 		var diagnosisPage=[];
 		diagnosis.forEach(function(diag,idx){
 			if(Math.floor( (idx)/10 ) == page){
 				diag.result = [];
 				diag.resultadoTxt.forEach(function(line){
-					var phrase = line;
-					line = {};
-					line.phrase = phrase;
-					line.tokens = [];
-					var max = 0;
-					classifier.getClassifications(phrase).forEach(function(classification){
-						if(classification.value > max){
-							max = classification.value;
-						}
-						line.tokens.push({label:classification.label,value:classification.value});
-					});
-					line.maxValue = max;
-					if(line.maxValue < classFilter)
-						diag.result.push(line);
+					if(strFilter == "" || line.indexOf(strFilter) != -1){
+						var phrase = line;
+						line = {};
+						line.phrase = phrase;
+						line.tokens = [];
+						var max = 0;
+						classifier.getClassifications(phrase).forEach(function(classification){
+							if(classification.value > max){
+								max = classification.value;
+							}
+							line.tokens.push({label:classification.label,value:classification.value});
+						});
+						line.maxValue = max;
+						if(line.maxValue < classFilter)
+							diag.result.push(line);
+					}
 				});
-				diagnosisPage.push(diag);
+				if(diag.result.length > 0)
+					diagnosisPage.push(diag);
 			}
 		});
 		res.render('classify',{diagnosis:diagnosisPage,tokens:settings.allTokens,page:page,totalPages:Math.ceil(diagnosis.length/10) });
+	});
+	
+});
+
+app.get('/resume/', function(req, res) {
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		var counters = {};
+		counters.ok = 0;
+		counters.med = 0;
+		counters.bad = 0;
+		counters.total = 0;
+		diagnosis.forEach(function(diag,idx){
+			diag.resultadoTxt.forEach(function(line){
+				var max=0;
+				classifier.getClassifications(phrase).forEach(function(classification){
+					if(classification.value > max){
+						max = classification.value;
+					}
+				});
+				counters.total++;
+				if(max > 0.9){
+					counters.ok++;
+				}else if(max > 0.9){
+					counters.med++;
+				}else{
+					counters.bad++;
+				}
+			});
+		});
+		
+		res.render('resume',{counters:counters});
 	});
 	
 });
@@ -100,13 +145,17 @@ io.on('connection', function(socket) {
 		settings.nlpDictionary.tokens = settings.nlpDictionary.tokens.filter(function(ele){
 			return ele != token;
 		});
-		saveSettings();
+		saveSettings()
+		.then(loadSettings)
+		.then(initClassifier);
 	});
 	socket.on('addToken', function(token) {
 		if(settings.allTokens.indexOf(token) == -1){
 			settings.allTokens.push(token);
 		}
-		saveSettings();
+		saveSettings()
+		.then(loadSettings)
+		.then(initClassifier);
 	});
 
 	socket.on('sendClassification', function(res) {

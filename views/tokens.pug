@@ -30,9 +30,9 @@ block content
 
             socket.emit('addToken', str);
         }
-    div(id="all-divs")
+    div(id="all-divs" style="display: flex;flex-wrap: wrap;")
         for t in tokens
-            <div id= "#{ t }">
+            <div id= "#{ t }" style="padding:20px;">
                 spam #{ t } <button onclick="remove('#{ t }')">x</button>
             </div>
 
