@@ -39,7 +39,6 @@ app.get('/tokens/', function (req, res) {
 		for(var i=0;i<diagnosis.length;i++)
 		{
 			var diag = diagnosis[i];
-			console.log(i+" - "+diag.resultadoTxt.length);
 			diag.resultadoTxt.forEach(function(line){
 				if(!classifier.getBestClassification(line) || classifier.getBestClassification(line).value < 0.9){
 					phrases.push(line);
@@ -53,29 +52,39 @@ app.get('/tokens/', function (req, res) {
 	});
 });
 app.get('/classify/', function(req, res) {
-	MongoUtils.getSomeDiagnosis(3)
+	MongoUtils.getAllDiagnosis()
 	.then(function(diagnosis){
-		diagnosis = diagnosis.map(function(diag){
-			diag.result = diag.resultadoTxt.map(function(line){
-				var phrase = line;
-				line = {};
-				line.phrase = phrase;
-				line.tokens = [];
-				var max = 0;
-				classifier.getClassifications(phrase).forEach(function(classification){
-					if(classification.value > max){
-						max = classification.value;
-					}
-					if(classification.value > 0.7){
-						line.tokens.push(classification);
-					}
+		var page = req.query.page;
+		if(page==undefined)
+			page=0;
+		
+		var classFilter = req.query.classFilter;
+			if(classFilter==undefined)
+			classFilter=1;
+		var diagnosisPage=[];
+		diagnosis.forEach(function(diag,idx){
+			if(Math.floor( (idx)/10 ) == page){
+				diag.result = [];
+				diag.resultadoTxt.forEach(function(line){
+					var phrase = line;
+					line = {};
+					line.phrase = phrase;
+					line.tokens = [];
+					var max = 0;
+					classifier.getClassifications(phrase).forEach(function(classification){
+						if(classification.value > max){
+							max = classification.value;
+						}
+						line.tokens.push({label:classification.label,value:classification.value});
+					});
+					line.maxValue = max;
+					if(line.maxValue < classFilter)
+						diag.result.push(line);
 				});
-				line.maxValue = max;
-				return line;
-			});
-			return diag;
+				diagnosisPage.push(diag);
+			}
 		});
-		res.render('classify',{diagnosis:diagnosis,tokens:settings.allTokens});
+		res.render('classify',{diagnosis:diagnosisPage,tokens:settings.allTokens,page:page,totalPages:Math.ceil(diagnosis.length/10) });
 	});
 	
 });
@@ -108,7 +117,9 @@ io.on('connection', function(socket) {
 				settings.nlpDictionary.tokens.push(elem.token);
 			}
 		});
-		saveSettings();
+		saveSettings()
+		.then(loadSettings)
+		.then(initClassifier);
 	});
 });
 
@@ -202,8 +213,7 @@ function PrintDiagnosisOnFile(){
 
 function initClassifier(settings){
 	var deferred = promise.defer();
-	console.log("Init classifier with settings phrases")
-
+	console.log("Init classifier with settings phrases");
 	settings.nlpDictionary.phrases.forEach(function(phrase,idx){
 		classifier.add(phrase, settings.nlpDictionary.tokens[idx]);
 	});
@@ -215,5 +225,5 @@ function initClassifier(settings){
 }
 
 loadSettings()
-.then(MongoUtils.initClassifier);
+.then(initClassifier);
 // .then(SaveAllDiagnosis);
