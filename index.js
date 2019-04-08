@@ -103,7 +103,11 @@ app.get('/classify/', function(req, res) {
 });
 
 app.get('/resume/', function(req, res) {
-	MongoUtils.getAllDiagnosis()
+	var num = Number.parseInt(req.query.num);
+	if(num==undefined)
+		num=10;
+
+	MongoUtils.getSomeDiagnosis(num)
 	.then(function(diagnosis){
 		var counters = {};
 		counters.ok = 0;
@@ -113,7 +117,7 @@ app.get('/resume/', function(req, res) {
 		diagnosis.forEach(function(diag,idx){
 			diag.resultadoTxt.forEach(function(line){
 				var max=0;
-				classifier.getClassifications(phrase).forEach(function(classification){
+				classifier.getClassifications(line).forEach(function(classification){
 					if(classification.value > max){
 						max = classification.value;
 					}
@@ -121,14 +125,13 @@ app.get('/resume/', function(req, res) {
 				counters.total++;
 				if(max > 0.9){
 					counters.ok++;
-				}else if(max > 0.9){
+				}else if(max > 0.7){
 					counters.med++;
 				}else{
 					counters.bad++;
 				}
 			});
 		});
-		
 		res.render('resume',{counters:counters});
 	});
 	
