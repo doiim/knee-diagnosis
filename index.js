@@ -81,23 +81,28 @@ app.get('/classify/', function(req, res) {
 						line = {};
 						line.phrase = phrase;
 						line.tokens = [];
-						var max = 0;
-						classifier.getClassifications(phrase).forEach(function(classification){
-							if(classification.value > max){
-								max = classification.value;
+						var classifications = classifier.getClassifications(phrase);
+						var sum=0;
+						classifications.forEach(function(classification){
+							if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
+								sum+=classification.value;
 							}
 							line.tokens.push({label:classification.label,value:classification.value});
 						});
-						line.maxValue = max;
-						if(line.maxValue < classFilter)
-							diag.result.push(line);
+						
+						if(classifications[0].value < classFilter && sum < classFilter){
+							diag.result.push(line)
+						}
+
+						line.maxValue = classifications[0].value;
+						line.sum = sum;
 					}
 				});
 				if(diag.result.length > 0)
 					diagnosisPage.push(diag);
 			}
 		});
-		res.render('classify',{diagnosis:diagnosisPage,tokens:settings.allTokens,page:page,totalPages:Math.ceil(diagnosis.length/10) });
+		res.render('classify',{diagnosis:diagnosisPage,tokens:settings.allTokens,page:page,totalPages:Math.ceil(diagnosis.length/10),strFilter:strFilter,classFilter:classFilter });
 	});
 	
 });
@@ -113,22 +118,42 @@ app.get('/resume/', function(req, res) {
 		counters.ok = 0;
 		counters.med = 0;
 		counters.bad = 0;
+		counters.one = 0;
+		counters.many = 0;
 		counters.total = 0;
 		diagnosis.forEach(function(diag,idx){
 			diag.resultadoTxt.forEach(function(line){
-				var max=0;
-				classifier.getClassifications(line).forEach(function(classification){
-					if(classification.value > max){
-						max = classification.value;
+				var classifications = classifier.getClassifications(line);
+				var sum=0;
+				classifications.forEach(function(classification){
+					if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
+						sum+=classification.value;
 					}
 				});
 				counters.total++;
-				if(max > 0.9){
+				
+				if(classifications[0].value > 0.9){
+					counters.one++;
 					counters.ok++;
-				}else if(max > 0.7){
-					counters.med++;
+				}else if(classifications[0].value > 0.7){
+					if(sum > 0.9){
+						counters.many++;
+						counters.ok++;
+					}else{
+						counters.one++;
+						counters.med++;
+					}
 				}else{
-					counters.bad++;
+					if(sum > 0.9){
+						counters.many++;
+						counters.ok++;
+					}else if(sum > 0.7){
+						counters.many++;
+						counters.med++;
+					}else{
+						counters.one++;
+						counters.bad++;
+					}
 				}
 			});
 		});
@@ -214,12 +239,14 @@ function saveSettings(){
 var diagnosis = [];
 var count=0;
 function SaveAllDiagnosis(){
+	console.log("Init Saving all diagnosis");
 	var lineReader = require('readline').createInterface({
 		input: fs.createReadStream('./data/rm_joelho.txt')
 	});
 	
 	lineReader.on('line', function (line) {
 		count++;
+		console.log("Reading line - "+count);
 		if(count!=1)
 			diagnosis.push(line.split('\t'));
 	});
@@ -243,7 +270,6 @@ function SaveAllDiagnosis(){
 		q.start(function(err) {
 			console.log('Finished saving diagnosis!'.green);
 		});
-	
 	});
 }
 
@@ -271,6 +297,7 @@ function initClassifier(settings){
 	});
 	classifier.train()
 	.then(function(){
+		console.log("Trained classifier");
 		deferred.resolve();
 	});    
 	return deferred.promise;

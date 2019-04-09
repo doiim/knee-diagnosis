@@ -201,14 +201,14 @@ block content
 
         function search(){
             var searchDOM = document.getElementById("search");
-            window.location.href += "&strFilter="+searchDOM.value;
+            window.location.href = "?page="+#{page}+"&classFilter="+#{classFilter}+"&strFilter="+searchDOM.value;
         }
 
     div
         if page > 0
-            a(style="text-align: center;width: 50%;height: 40px;float: left;" href='/classify/?page='+(page-1)) PREVIOUS PAGE
+            a(style="text-align: center;width: 50%;height: 40px;float: left;" href='/classify/?page='+(Number.parseInt(page)-1)+'&strFilter='+strFilter+'&classFilter='+classFilter) PREVIOUS PAGE
         if page < totalPages
-            a(style="text-align: center;width: 50%;height: 40px;float: right;" href='/classify/?page='+(page+1)) NEXT PAGE
+            a(style="text-align: center;width: 50%;height: 40px;float: right;" href='/classify/?page='+(Number.parseInt(page)+1)+'&strFilter='+strFilter+'&classFilter='+classFilter) NEXT PAGE
     <input type="text" id="search" onchange="search()"><br>
     div
         for diag in diagnosis
@@ -230,8 +230,8 @@ block content
                 
                 for line,index in diag.result
                     - var linecolorRes="darkgray";
-                    - if(line.maxValue > 0.7) linecolorRes="lightgreen";
-                    - if(line.maxValue > 0.9) linecolorRes="green";
+                    - if(line.maxValue > 0.9 || line.sum > 0.9) linecolorRes="green";
+                    - else if(line.maxValue > 0.7 || line.sum > 0.7) linecolorRes="lightgreen";
                     div(id=index style="background: "+linecolorRes+";padding: 20px 0px;")
                         p(id="phrase" style="outline-style: dashed;") #{ line.phrase }
                         table(style="width: 100%;display: table;table-layout: fixed;border-style: solid;border-color: coral;")
@@ -257,6 +257,6 @@ block content
             </div>
     div
         if page > 0
-            a(style="text-align: center;width: 50%;height: 40px;float: left;" href='/classify/?page='+(page-1)) PREVIOUS PAGE
+            a(style="text-align: center;width: 50%;height: 40px;float: left;" href='/classify/?page='+(Number.parseInt(page)-1)+'&strFilter='+strFilter+'&classFilter='+classFilter) PREVIOUS PAGE
         if page < totalPages
-            a(style="text-align: center;width: 50%;height: 40px;float: right;" href='/classify/?page='+(page+1)) NEXT PAGE
+            a(style="text-align: center;width: 50%;height: 40px;float: right;" href='/classify/?page='+(Number.parseInt(page)+1)+'&strFilter='+strFilter+'&classFilter='+classFilter) NEXT PAGE
