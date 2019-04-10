@@ -17,7 +17,7 @@ var DiagnosisSchema   = new Schema({
 	dataLaudo: { type: Date, default: null },
 	resultadoHtml: String,
 	resultadoTxt: [String],
-	tokenList: [String],
+	tokenList: [[String]],
 	symptomList: [String],
 	resultList: [String]
    
