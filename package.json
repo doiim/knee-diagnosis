@@ -9,6 +9,7 @@
   "author": "Guilherme Lopes <guilherme@doiim.com>",
   "license": "ISC",
   "dependencies": {
+    "@tensorflow/tfjs-node": "^1.0.3",
     "cheerio": "^1.0.0-rc.2",
     "express": "^4.16.4",
     "helmet": "^3.16.0",

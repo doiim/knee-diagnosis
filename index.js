@@ -106,7 +106,6 @@ app.get('/classify/', function(req, res) {
 	});
 	
 });
-
 app.get('/resume/', function(req, res) {
 	var num = Number.parseInt(req.query.num);
 	if(num==undefined)
