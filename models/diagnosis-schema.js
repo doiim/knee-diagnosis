@@ -18,8 +18,9 @@ var DiagnosisSchema   = new Schema({
 	resultadoHtml: String,
 	resultadoTxt: [String],
 	tokenList: [[String]],
-	symptomList: [String],
-	resultList: [String]
+	vtokenList: [Number],
+	symptomList: [[String]],
+	resultList: [[String]]
    
 });
 

@@ -21,6 +21,7 @@ const classifier = new NlpClassifier({ language: 'pt' });
 
 // INTERN SCRIPTS
 var MongoUtils = require('./lib/mongo-utils');
+var TensorFlowUtils =  require('./lib/tensorflow-utils');
 
 // CONFIGURING EXPRESS TO SERVE
 app.set('view cache', false);
@@ -90,12 +91,12 @@ app.get('/classify/', function(req, res) {
 							line.tokens.push({label:classification.label,value:classification.value});
 						});
 						
+						line.maxValue = classifications[0].value;
+						line.sum = sum;
+
 						if(classifications[0].value < classFilter && sum < classFilter){
 							diag.result.push(line)
 						}
-
-						line.maxValue = classifications[0].value;
-						line.sum = sum;
 					}
 				});
 				if(diag.result.length > 0)
@@ -103,6 +104,48 @@ app.get('/classify/', function(req, res) {
 			}
 		});
 		res.render('classify',{diagnosis:diagnosisPage,tokens:settings.allTokens,page:page,totalPages:Math.ceil(diagnosis.length/10),strFilter:strFilter,classFilter:classFilter });
+	});
+	
+});
+app.get('/lowclassify/', function(req, res) {
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		var diagnosisPage=[];
+		diagnosis.forEach(function(diag,idx){
+			console.log("checking diag "+idx);
+			if(diagnosisPage.length > 100){
+				return;
+			}
+			diag.result = [];
+			diag.resultadoTxt.forEach(function(line){
+				if(line.match(/[A-Za-z]/i) == null){
+					console.log("Empty phrase");
+					return;
+				}
+				var phrase = line;
+				line = {};
+				line.phrase = phrase;
+				line.tokens = [];
+				var classifications = classifier.getClassifications(phrase);
+				var sum=0;
+				classifications.forEach(function(classification){
+					if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
+						sum+=classification.value;
+						line.tokens.push({label:classification.label,value:classification.value});
+					}
+				});
+				line.maxValue = classifications[0].value;
+				line.sum = sum;
+
+				if(line.tokens.length > 20){
+					diag.result.push(line);
+				}				
+			});
+			if(diag.result.length > 0){
+				diagnosisPage.push(diag);
+			}
+		});
+		res.render('lowclassify',{diagnosis:diagnosisPage,tokens:settings.allTokens });
 	});
 	
 });
@@ -119,17 +162,23 @@ app.get('/resume/', function(req, res) {
 		counters.bad = 0;
 		counters.one = 0;
 		counters.many = 0;
+		counters.nItens = 0;
 		counters.total = 0;
 		diagnosis.forEach(function(diag,idx){
 			diag.resultadoTxt.forEach(function(line){
 				var classifications = classifier.getClassifications(line);
 				var sum=0;
+				var numItens=0;
 				classifications.forEach(function(classification){
 					if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
 						sum+=classification.value;
+						numItens++;
 					}
 				});
 				counters.total++;
+				if(numItens > 20){
+					counters.nItens++;
+				}
 				
 				if(classifications[0].value > 0.9){
 					counters.one++;
@@ -157,6 +206,30 @@ app.get('/resume/', function(req, res) {
 			});
 		});
 		res.render('resume',{counters:counters});
+	});
+	
+});
+app.get('/predict/', function(req, res) {
+	var rawData = [];
+	MongoUtils.getValidDiagnosis()
+	.then(function(diag){
+		var symptomList = diag.symptomList;
+		var resultList = diag.resultList;
+		
+		if(symptomList != null && symptomList.length > 0 && resultList != null && resultList.length > 0){
+			rawData.push({symptomList:symptomList,resultList:resultList});
+		}
+		var result = [];
+		var res2 = [];
+		TensorFlowUtils.predict(rawData,settings).forEach(function(ele){
+			var val = ele*settings.allTokens.length;
+			res2.push( {val:val,label:settings.allTokens[Math.round(val)]} );
+			if(res2.length == 6){
+				result.push(res2);
+				res2 = [];
+			}
+		});
+		res.render('predict',{resultList:rawData[0].resultList,result:result});
 	});
 	
 });
@@ -234,7 +307,6 @@ function saveSettings(){
 	return deferred.promise;
 }
 
-
 var diagnosis = [];
 var count=0;
 function SaveAllDiagnosis(){
@@ -277,8 +349,9 @@ function PrintDiagnosisOnFile(){
 	.then(function(diagnosis){
 		var result='';
 		diagnosis.forEach(function(diag){
-			diag.resultadoTxt.forEach(function(line){
+			diag.resultadoTxt.forEach(function(line,idx){
 				result += line+'\n';
+				result += diag.tokenList+'\n';
 			});
 			result += '\n\n*********************************************************\n\n'
 		});
@@ -314,17 +387,21 @@ function generatingTokens(){
 		diagnosis.forEach(function(diag,idx){
 			q.push(function(cb) {
 				var tokenList = [];
+				var vtokenList=[];
 				diag.resultadoTxt.forEach(function(line){
 					var lineTokens=[];
+					var sum=0;
 					var classifications = classifier.getClassifications(line);
 					classifications.forEach(function(classification){
 						if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
 							lineTokens.push(classification.label);
+							sum +=classification.value;
 						}
 					});
+					vtokenList.push(sum);
 					tokenList.push(lineTokens);
 				});
-				MongoUtils.UpdateTokenList(diag,tokenList)
+				MongoUtils.UpdateTokenList(diag,tokenList,vtokenList)
 				.then(function(diag){
 					console.log("Done diag: "+idx);
 					cb();
@@ -380,12 +457,11 @@ function buildSymptonResultList(){
 			var startDiag=false;
 			diag.tokenList.forEach(function(lineTokens){
 				var ind = lineTokens.indexOf("diagnostico");
-				if(ind != -1 && lineTokens.length < 7){
-					lineTokens.splice(ind,1);
+				if(ind != -1){
 					startDiag=true;
 				}
-				if(startDiag && lineTokens.length > 0 && lineTokens.length < 7){
-					if(diagnosisList.indexOf(lineTokens) == -1)
+				if(startDiag && lineTokens.length > 0){
+					if(!hasList(diagnosisList,lineTokens))
 						diagnosisList.push(lineTokens);
 				}
 			});		
@@ -400,12 +476,13 @@ function buildSymptonResultList(){
 				diag.symptomList = [];
 				diag.resultList = [];
 				diag.tokenList.forEach(function(lineTokens){
-					if(diagnosisList.indexOf(lineTokens) == -1){
-						if(lineTokens.length > 0 && lineTokens.length < 7)
+					if(lineTokens.length > 0){
+						if(hasList(diagnosisList,lineTokens)){
+							diag.resultList.push(lineTokens);
+						}else{
 							diag.symptomList.push(lineTokens);
-					}else{
-						diag.resultList.push(lineTokens);
-					}				
+						}	
+					}			
 				});		
 				MongoUtils.UpdateDiagnosis(diag)
 				.then(function(res){
@@ -422,9 +499,59 @@ function buildSymptonResultList(){
 	return deferred.promise;
 }
 
-loadSettings();
+function hasList(bigList,list){
+	for(var i=0;i< bigList.length;i++){
+
+		var itemList = bigList[i];
+		if(itemList.length != list.length) continue;
+
+		var same=true;
+		for(var j=0;j<list.length;j++){
+			if(itemList.indexOf(list[j]) == -1){
+				same=false;
+				break;
+			}
+		}
+		if(same) 
+			return true;
+	}
+	return false;
+}
+
+function callTensorFlow(){
+	var rawData = [];
+	var maxS=0,maxR=0,maxLS=0,maxLR=0;
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		diagnosis.forEach(function(diag,idx){
+			var symptomList = diag.symptomList;
+			var resultList = diag.resultList;
+			
+			if(symptomList != null && symptomList.length > 0 && resultList != null && resultList.length > 0){
+				rawData.push({symptomList:symptomList,resultList:resultList});
+			}
+		});
+		console.log("Finished building rawData for tensorflow");
+	
+		TensorFlowUtils.InitTensorFlow(rawData,0.2,settings);
+	});
+}
+
+loadSettings()
+
+// .then(SaveAllDiagnosis);
+
 // .then(initClassifier)
 // .then(function(){
-// 	setTimeout(buildSymptonResultList,1000);
+// 	 setTimeout(generatingTokens,2000);
 // });
-// .then(SaveAllDiagnosis);
+
+// .then(buildSymptonResultList);
+
+// .then(callTensorFlow);
+
+.then(initClassifier)
+.then(function(){
+	 console.log("GO AHEAD: Gol de Cabeça!");
+});
+
