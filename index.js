@@ -14,7 +14,7 @@ var moment = require('moment');
 var bodyParser = require('body-parser');
 var promise = require('q');
 var queue = require('queue');
-var io = require('socket.io')(5001);
+var io = require('socket.io')(process.argv[3].split('=')[1]);
 
 const { NlpClassifier } = require('node-nlp');
 const classifier = new NlpClassifier({ language: 'pt' });
@@ -31,7 +31,7 @@ app.use(express.static('public'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(helmet());
-app.listen(4001);
+app.listen(process.argv[2].split('=')[1]);
 
 app.get('/tokens/', function (req, res) {
 	MongoUtils.getAllDiagnosis()
@@ -128,16 +128,19 @@ app.get('/lowclassify/', function(req, res) {
 				line.tokens = [];
 				var classifications = classifier.getClassifications(phrase);
 				var sum=0;
+				var hasMeta=false;
 				classifications.forEach(function(classification){
 					if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
 						sum+=classification.value;
 						line.tokens.push({label:classification.label,value:classification.value});
+						if(classification.label == "meta" || classification.label == "diagnostico" || classification.label == "titulo")
+							hasMeta=true;
 					}
 				});
 				line.maxValue = classifications[0].value;
 				line.sum = sum;
 
-				if(line.tokens.length > 20){
+				if(hasMeta && line.tokens.length > 1){
 					diag.result.push(line);
 				}				
 			});
@@ -146,6 +149,55 @@ app.get('/lowclassify/', function(req, res) {
 			}
 		});
 		res.render('lowclassify',{diagnosis:diagnosisPage,tokens:settings.allTokens });
+	});
+	
+});
+app.get('/print/', function(req, res) {
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		var diagnosisPage=[];
+		var printStr="";
+		diagnosis.forEach(function(diag,idx){
+			console.log("Checking diag "+idx);
+			printStr +="DIAGNOSIS "+idx+"\n";
+			printStr += "\tSymptoms:"+"\n";
+			diag.symptomList.forEach(function(line){
+				printStr +="\t\t"+ line+"\n";
+			});
+			printStr += "\tResults:"+"\n";
+			diag.resultList.forEach(function(line){
+				printStr +="\t\t"+ line+"\n";
+			});
+			// diag.result = [];
+			// diag.resultadoTxt.forEach(function(line){
+			// 	var phrase = line;
+			// 	line = {};
+			// 	line.phrase = phrase;
+			// 	line.tokens = [];
+			// 	var classifications = classifier.getClassifications(phrase);
+			// 	var sum=0;
+			// 	var hasMeta=false;
+			// 	classifications.forEach(function(classification){
+			// 		if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
+			// 			sum+=classification.value;
+			// 			line.tokens.push({label:classification.label,value:classification.value});
+			// 			if(classification.label == "meta" || classification.label == "diagnostico" || classification.label == "titulo")
+			// 				hasMeta=true;
+			// 		}
+			// 	});
+			// 	if(hasMeta && line.tokens.length == 1){
+			// 		printStr += line.phrase+"\n";
+			// 		line.tokens.forEach(function(tok,i){
+			// 			printStr += tok.label+" ";
+			// 		});
+			// 		printStr +="\n";
+			// 	}
+			// });
+		});
+		fs.writeFile("./data/allDiags.txt", printStr , function(err) {
+			if(err) return console.error('Error saving diagnosis file: ' + err);
+		});
+		res.render('print',{ });
 	});
 	
 });
@@ -224,7 +276,7 @@ app.get('/predict/', function(req, res) {
 		TensorFlowUtils.predict(rawData,settings).forEach(function(ele){
 			var val = ele*settings.allTokens.length;
 			res2.push( {val:val,label:settings.allTokens[Math.round(val)]} );
-			if(res2.length == 6){
+			if(res2.length == TensorFlowUtils.getOutLineSize()){
 				result.push(res2);
 				res2 = [];
 			}
@@ -455,30 +507,61 @@ function buildSymptonResultList(){
 		console.log("Starting looking for diagnosis attribute");
 		diagnosis.forEach(function(diag,idx){
 			var startDiag=false;
-			diag.tokenList.forEach(function(lineTokens){
-				var ind = lineTokens.indexOf("diagnostico");
-				if(ind != -1){
+			var tokenList = [];
+			diag.tokenList.forEach(function(lineTokens,idxLine){
+				tokenList.push({tokens:lineTokens,val:diag.vtokenList[idxLine]});
+			});
+			tokenList.sort(function(a,b){
+				if(a.val > b.val) return -1;
+				else if(a.val < b.val) return 1;
+				else return 0;
+			});
+
+			tokenList.forEach(function(item){
+				if(item.tokens.indexOf("diagnostico") != -1){
 					startDiag=true;
+					item.tokens.splice(item.tokens.indexOf("diagnostico"),1);
 				}
-				if(startDiag && lineTokens.length > 0){
-					if(!hasList(diagnosisList,lineTokens))
-						diagnosisList.push(lineTokens);
+				if(item.tokens.indexOf("meta") != -1){
+					item.tokens.splice(item.tokens.indexOf("meta"),1);
+				}
+				if(item.tokens.indexOf("titulo") != -1){
+					item.tokens.splice(item.tokens.indexOf("titulo"),1);
+				}
+				if(startDiag && item.tokens.length > 0){
+					if(!hasList(diagnosisList,item.tokens))
+						diagnosisList.push(item.tokens);
 				}
 			});		
 		});
+		console.log(diagnosisList);
 		var q = queue();
 		q.timeout = 100;
 		q.concurrency = 1;
+		
 		console.log("Starting building symptomList and resultList");
 		diagnosis.forEach(function(diag,idx){
 			q.push(function(cb) {
 				console.log("Diagnostico: "+diag._id);
 				diag.symptomList = [];
 				diag.resultList = [];
-				diag.tokenList.forEach(function(lineTokens){
+				diag.tokenList.forEach(function(lt){
+					var lineTokens = lt;
 					if(lineTokens.length > 0){
-						if(hasList(diagnosisList,lineTokens)){
+						if(lineTokens.indexOf("meta") != -1){
+							lineTokens.splice(lineTokens.indexOf("meta"),1);
+						}
+						if(lineTokens.indexOf("titulo") != -1){
+							lineTokens.splice(lineTokens.indexOf("titulo"),1);
+						}
+						if(lineTokens.indexOf("diagnostico") != -1){
+							lineTokens.splice(lineTokens.indexOf("diagnostico"),1);
+						}
+						if(lineTokens == 0){
+							return;
+						}else if(hasList(diagnosisList,lineTokens)){
 							diag.resultList.push(lineTokens);
+							diag.symptomList.push(lineTokens);
 						}else{
 							diag.symptomList.push(lineTokens);
 						}	
@@ -533,7 +616,7 @@ function callTensorFlow(){
 		});
 		console.log("Finished building rawData for tensorflow");
 	
-		TensorFlowUtils.InitTensorFlow(rawData,0.2,settings);
+		TensorFlowUtils.InitTensorFlow(rawData,settings);
 	});
 }
 
@@ -548,10 +631,10 @@ loadSettings()
 
 // .then(buildSymptonResultList);
 
-// .then(callTensorFlow);
+.then(callTensorFlow);
 
-.then(initClassifier)
-.then(function(){
-	 console.log("GO AHEAD: Gol de Cabeça!");
-});
+// .then(initClassifier)
+// .then(function(){
+// 	 console.log("GO AHEAD: Gol de Cabeça!");
+// });
 
