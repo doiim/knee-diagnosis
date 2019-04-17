@@ -262,11 +262,11 @@ app.get('/resume/', function(req, res) {
 	
 });
 app.get('/predict/', function(req, res) {
-	var num = Number.parseInt(req.query.num);
-	if(num==undefined)
-		num=0;
+	var id = req.query.id;
+	if(id==undefined)
+		id="";
 	var rawData = [];
-	MongoUtils.getValidDiagnosis(num)
+	MongoUtils.getValidDiagnosis(id)
 	.then(function(diag){
 		var symptomList = diag.symptomList;
 		var resultList = diag.resultList;
@@ -440,7 +440,7 @@ function generatingTokens(){
 					var sum=0;
 					var classifications = classifier.getClassifications(line);
 					classifications.forEach(function(classification){
-						if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
+						if( (classifications[0].value - classification.value)/classifications[0].value < 0.4){
 							lineTokens.push(classification.label);
 							sum +=classification.value;
 						}
@@ -476,7 +476,7 @@ function resetingTokens(){
 		console.log("Starting reseting token list");
 		diagnosis.forEach(function(diag,idx){
 			q.push(function(cb) {
-				MongoUtils.UpdateTokenList(diag,null)
+				MongoUtils.ResetingSRList(diag,null)
 				.then(function(diag){
 					console.log("Done "+idx);
 					cb();
@@ -501,6 +501,7 @@ function buildSymptonResultList(){
 		var diagnosisList=[];
 		console.log("Starting looking for diagnosis attribute");
 		diagnosis.forEach(function(diag,idx){
+			console.log("Diagnostico: "+idx);
 			var startDiag=false;
 			var tokenList = [];
 			diag.tokenList.forEach(function(lineTokens,idxLine){
@@ -513,23 +514,21 @@ function buildSymptonResultList(){
 			});
 
 			tokenList.forEach(function(item){
-				if(item.tokens.indexOf("diagnostico") != -1){
-					startDiag=true;
-					item.tokens.splice(item.tokens.indexOf("diagnostico"),1);
-				}
-				if(item.tokens.indexOf("meta") != -1){
-					item.tokens.splice(item.tokens.indexOf("meta"),1);
-				}
-				if(item.tokens.indexOf("titulo") != -1){
-					item.tokens.splice(item.tokens.indexOf("titulo"),1);
-				}
-				if(startDiag && item.tokens.length > 0){
-					if(!hasList(diagnosisList,item.tokens))
-						diagnosisList.push(item.tokens);
+				var tokens = [];
+				item.tokens.forEach(function(tok){
+					if(tok == "diagnostico"){
+						startDiag=true;
+					}else if(tok != "titulo" && tok != "meta"){
+						tokens.push(tok);
+					}
+				});
+				
+				if(startDiag && tokens.length > 0){
+					if(!hasList(diagnosisList,tokens))
+						diagnosisList.push(tokens);
 				}
 			});		
 		});
-		console.log(diagnosisList);
 		var q = queue();
 		q.timeout = 100;
 		q.concurrency = 1;
@@ -537,30 +536,26 @@ function buildSymptonResultList(){
 		console.log("Starting building symptomList and resultList");
 		diagnosis.forEach(function(diag,idx){
 			q.push(function(cb) {
-				console.log("Diagnostico: "+diag._id);
+				console.log("Diagnostico: "+idx);
 				diag.symptomList = [];
 				diag.resultList = [];
-				diag.tokenList.forEach(function(lt){
-					var lineTokens = lt;
-					if(lineTokens.length > 0){
-						if(lineTokens.indexOf("meta") != -1){
-							lineTokens.splice(lineTokens.indexOf("meta"),1);
+				diag.tokenList.forEach(function(lineTokens){
+					var tokens = [];
+					lineTokens.forEach(function(tok){
+						if(tok != "diagnostico" && tok != "titulo" && tok != "meta"){
+							tokens.push(tok);
 						}
-						if(lineTokens.indexOf("titulo") != -1){
-							lineTokens.splice(lineTokens.indexOf("titulo"),1);
-						}
-						if(lineTokens.indexOf("diagnostico") != -1){
-							lineTokens.splice(lineTokens.indexOf("diagnostico"),1);
-						}
-						if(lineTokens == 0){
-							return;
-						}else if(hasList(diagnosisList,lineTokens)){
-							diag.resultList.push(lineTokens);
-							diag.symptomList.push(lineTokens);
+					});
+					
+					if(!hasOnlyAuxTokens(tokens)){
+						
+						if(hasList(diagnosisList,tokens)){
+							diag.resultList.push(tokens);
+							diag.symptomList.push(tokens);
 						}else{
-							diag.symptomList.push(lineTokens);
-						}	
-					}			
+							diag.symptomList.push(tokens);
+						}		
+					}		
 				});		
 				MongoUtils.UpdateDiagnosis(diag)
 				.then(function(res){
@@ -575,6 +570,16 @@ function buildSymptonResultList(){
 	});
 
 	return deferred.promise;
+}
+
+function hasOnlyAuxTokens(line){
+	var res=true;
+	line.forEach(function(token){
+		if(settings.auxTokens.indexOf(token) == -1){
+			res=false;
+		}
+	});
+	return res;
 }
 
 function hasList(bigList,list){
@@ -632,4 +637,7 @@ loadSettings()
 // .then(function(){
 // 	 console.log("GO AHEAD: Gol de Cabeça!");
 // });
+
+// .then(resetingTokens);
+
 
