@@ -262,8 +262,11 @@ app.get('/resume/', function(req, res) {
 	
 });
 app.get('/predict/', function(req, res) {
+	var num = Number.parseInt(req.query.num);
+	if(num==undefined)
+		num=0;
 	var rawData = [];
-	MongoUtils.getValidDiagnosis()
+	MongoUtils.getValidDiagnosis(num)
 	.then(function(diag){
 		var symptomList = diag.symptomList;
 		var resultList = diag.resultList;
@@ -271,16 +274,8 @@ app.get('/predict/', function(req, res) {
 		if(symptomList != null && symptomList.length > 0 && resultList != null && resultList.length > 0){
 			rawData.push({symptomList:symptomList,resultList:resultList});
 		}
-		var result = [];
-		var res2 = [];
-		TensorFlowUtils.predict(rawData,settings).forEach(function(ele){
-			var val = ele*settings.allTokens.length;
-			res2.push( {val:val,label:settings.allTokens[Math.round(val)]} );
-			if(res2.length == TensorFlowUtils.getOutLineSize()){
-				result.push(res2);
-				res2 = [];
-			}
-		});
+		var result = TensorFlowUtils.predict(rawData,settings);
+
 		res.render('predict',{resultList:rawData[0].resultList,result:result});
 	});
 	
