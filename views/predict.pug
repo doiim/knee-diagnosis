@@ -6,14 +6,22 @@ block content
     script.
         var socket = io.connect('http://localhost:5001/');
     div
-        p ESPERADO
-        for res in resultList
+        p ESPERADO TOKENS
+        for res in esperadoT
             for tok in res
                 spam #{tok} --- 
             br
     div
-        p RESULTADO
-        for res in result
+        p RESULTADO TOKENS
+        for res in resultadoT
             for tok in res
-                spam #{tok.label}(#{Math.round(tok.val*100)/100}) --- 
+                spam #{tok.label} --- 
             br
+    div
+        p ESPERADO FRASES
+        for txt in esperadoF
+            p -     #{txt} 
+    div
+        p RESULTADO FRASES
+        for phrase in resultadoF
+            p -     #{phrase} 

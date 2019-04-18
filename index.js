@@ -133,7 +133,7 @@ app.get('/lowclassify/', function(req, res) {
 					if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
 						sum+=classification.value;
 						line.tokens.push({label:classification.label,value:classification.value});
-						if(classification.label == "meta" || classification.label == "diagnostico" || classification.label == "titulo")
+						if(classification.label == "meta" || classification.label == "diagnostico")
 							hasMeta=true;
 					}
 				});
@@ -181,7 +181,7 @@ app.get('/print/', function(req, res) {
 			// 		if( (classifications[0].value - classification.value)/classifications[0].value < 0.2){
 			// 			sum+=classification.value;
 			// 			line.tokens.push({label:classification.label,value:classification.value});
-			// 			if(classification.label == "meta" || classification.label == "diagnostico" || classification.label == "titulo")
+			// 			if(classification.label == "meta" || classification.label == "diagnostico")
 			// 				hasMeta=true;
 			// 		}
 			// 	});
@@ -274,11 +274,118 @@ app.get('/predict/', function(req, res) {
 		if(symptomList != null && symptomList.length > 0 && resultList != null && resultList.length > 0){
 			rawData.push({symptomList:symptomList,resultList:resultList});
 		}
-		var result = TensorFlowUtils.predict(rawData,settings);
+		var toks = TensorFlowUtils.predict(rawData,settings);
+		
+		var esperadoF =[];
+		diag.tokenList.forEach(function(tokens,i){
+			if(tokens.indexOf("meta") != -1)
+				tokens.splice(tokens.indexOf("meta"),1);
+			if(tokens.indexOf("diagnostico") != -1)
+				tokens.splice(tokens.indexOf("diagnostico"),1);
+			if(tokens.indexOf("titulo") != -1)
+				tokens.splice(tokens.indexOf("titulo"),1);
+		});
 
-		res.render('predict',{resultList:rawData[0].resultList,result:result});
+		rawData[0].resultList.forEach(function(res){
+			var idx = -1;
+			diag.tokenList.forEach(function(tokens,i){
+				var found = true;
+				if(tokens.length != res.length){
+					found = false;
+					return;
+				}
+				tokens.forEach(function(tok,j){
+					if(tok != res[j])
+						found = false;
+				});
+				if(found){
+					idx = i;
+				}
+			});
+			if(idx != -1)
+				esperadoF.push( diag.resultadoTxt[ idx ]  );
+			else{
+				console.log("ERROR FINDING RESULT ON TOKEN LIST");
+			}
+		});
+		findPhrase(toks)
+		.then(function(phrases){
+			var length = phrases.length;
+			rawData[0].resultList.splice(length,rawData[0].resultList.length - length);
+			esperadoF.splice(length,esperadoF.length - length);
+
+			res.render('predict',{esperadoF:esperadoF,esperadoT:rawData[0].resultList,resultadoF:phrases,resultadoT:toks});
+		});
+
+		
 	});
 	
+});
+app.get('/predictfromfile/', function(req, res) {
+	var strToPredict="";
+	try{
+		strToPredict = fs.readFileSync("./data/predict.txt").toString();
+	} catch (err){
+		console.log(err);
+		return;
+	}
+	var resultadoTxt = strToPredict.split('\n');
+    resultadoTxt = resultadoTxt.filter(function(line){
+        return !(!line || line.length == 0 || line.match(/[A-Za-z]/i) == null)
+	});
+
+	var rawData = [];
+	generateTokens(resultadoTxt)
+	.then(buildSRList)
+	.then(function(diag){
+		var symptomList = diag.symptomList;
+		var resultList = diag.resultList;
+		
+		if(symptomList != null && symptomList.length > 0 && resultList != null && resultList.length > 0){
+			rawData.push({symptomList:symptomList,resultList:resultList});
+		}
+		var toks = TensorFlowUtils.predict(rawData,settings);
+		var esperadoF =[];
+		diag.tokenList.forEach(function(tokens,i){
+			if(tokens.indexOf("meta") != -1)
+				tokens.splice(tokens.indexOf("meta"),1);
+			if(tokens.indexOf("diagnostico") != -1)
+				tokens.splice(tokens.indexOf("diagnostico"),1);
+			if(tokens.indexOf("titulo") != -1)
+				tokens.splice(tokens.indexOf("titulo"),1);
+		});
+
+		rawData[0].resultList.forEach(function(res){
+			var idx = -1;
+			diag.tokenList.forEach(function(tokens,i){
+				var found = true;
+				if(tokens.length != res.length){
+					found = false;
+					return;
+				}
+				tokens.forEach(function(tok,j){
+					if(tok != res[j])
+						found = false;
+				});
+				if(found){
+					idx = i;
+				}
+			});
+			if(idx != -1)
+				esperadoF.push( diag.resultadoTxt[ idx ]  );
+			else{
+				console.log("ERROR FINDING RESULT ON TOKEN LIST");
+			}
+		});
+		findPhrase(toks)
+		.then(function(phrases){
+			var length = phrases.length;
+			rawData[0].resultList.splice(length,rawData[0].resultList.length - length);
+			esperadoF.splice(length,esperadoF.length - length);
+
+			res.render('predict',{esperadoF:esperadoF,esperadoT:rawData[0].resultList,resultadoF:phrases,resultadoT:toks});
+		});
+	});
 });
 
 io.on('connection', function(socket) {
@@ -465,6 +572,33 @@ function generatingTokens(){
 	return deferred.promise;
 }
 
+function generateTokens(resultadoTxt){
+	var deferred = promise.defer();
+	
+	var tokenList = [];
+	var vtokenList=[];
+	resultadoTxt.forEach(function(line){
+		var lineTokens=[];
+		var sum=0;
+		var classifications = classifier.getClassifications(line);
+		classifications.forEach(function(classification){
+			if( (classifications[0].value - classification.value)/classifications[0].value < 0.4){
+				lineTokens.push(classification.label);
+				sum +=classification.value;
+			}
+		});
+		vtokenList.push(sum);
+		tokenList.push(lineTokens);
+	});
+	var res = {};
+	res.resultadoTxt = resultadoTxt;
+	res.vtokenList = vtokenList;
+	res.tokenList = tokenList;
+	deferred.resolve(res);
+
+	return deferred.promise;
+}
+
 function resetingTokens(){
 	var deferred = promise.defer();
 	var q = queue();
@@ -518,7 +652,7 @@ function buildSymptonResultList(){
 				item.tokens.forEach(function(tok){
 					if(tok == "diagnostico"){
 						startDiag=true;
-					}else if(tok != "titulo" && tok != "meta"){
+					}else if(tok != "meta"){
 						tokens.push(tok);
 					}
 				});
@@ -542,7 +676,7 @@ function buildSymptonResultList(){
 				diag.tokenList.forEach(function(lineTokens){
 					var tokens = [];
 					lineTokens.forEach(function(tok){
-						if(tok != "diagnostico" && tok != "titulo" && tok != "meta"){
+						if(tok != "diagnostico" && tok != "meta"){
 							tokens.push(tok);
 						}
 					});
@@ -567,6 +701,69 @@ function buildSymptonResultList(){
 			console.log('Finished building symptomList and resultList');
 			deferred.resolve();
 		});
+	});
+
+	return deferred.promise;
+}
+
+function buildSRList(diagP){
+	var deferred = promise.defer();
+
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		var diagnosisList=[];
+		console.log("Starting looking for diagnosis attribute");
+		diagnosis.forEach(function(diag,idx){
+			console.log("Diagnostico: "+idx);
+			var startDiag=false;
+			var tokenList = [];
+			diag.tokenList.forEach(function(lineTokens,idxLine){
+				tokenList.push({tokens:lineTokens,val:diag.vtokenList[idxLine]});
+			});
+			tokenList.sort(function(a,b){
+				if(a.val > b.val) return -1;
+				else if(a.val < b.val) return 1;
+				else return 0;
+			});
+
+			tokenList.forEach(function(item){
+				var tokens = [];
+				item.tokens.forEach(function(tok){
+					if(tok == "diagnostico"){
+						startDiag=true;
+					}else if(tok != "meta"){
+						tokens.push(tok);
+					}
+				});
+				
+				if(startDiag && tokens.length > 0){
+					if(!hasList(diagnosisList,tokens))
+						diagnosisList.push(tokens);
+				}
+			});		
+		});
+		
+		diagP.symptomList = [];
+		diagP.resultList = [];
+		diagP.tokenList.forEach(function(lineTokens){
+			var tokens = [];
+			lineTokens.forEach(function(tok){
+				if(tok != "diagnostico" && tok != "meta"){
+					tokens.push(tok);
+				}
+			});
+			
+			if(!hasOnlyAuxTokens(tokens)){
+				
+				if(hasList(diagnosisList,tokens)){
+					diagP.resultList.push(tokens);
+					diagP.symptomList.push(tokens);
+				}else{
+					diagP.symptomList.push(tokens);
+				}		
+			}		
+		});	
+		deferred.resolve(diagP);
 	});
 
 	return deferred.promise;
@@ -620,6 +817,71 @@ function callTensorFlow(){
 	});
 }
 
+function findPhrase(predictions){
+	console.log("Started find similarity phrase");
+	var deferred = promise.defer();
+	var pValues=[];
+	var phrases=[];
+	predictions.forEach(function(ele,i){
+		pValues.push(0);
+		var str="";
+		predictions[i] = ele.filter(function(item){
+			if(item.label != "meta"){
+				str+=item.label+" ";
+				return true;
+			}
+			return false;
+		});
+		phrases.push(str);
+	});
+
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		var finished=false;
+		for(var i=0;i < diagnosis.length;i++){
+
+			for(var j=0;j < diagnosis[i].tokenList.length;j++){
+
+				for(var k=0;k < predictions.length;k++){
+					
+					if(pValues[k] < predictions[k].length*2){
+						finished=false;
+						var similarity = calculateSimilarity(predictions[k],diagnosis[i].tokenList[j]);
+						if(similarity > pValues[k]){
+							pValues[k] = similarity;
+							phrases[k] = diagnosis[i].resultadoTxt[j];
+						}
+					}
+				}
+				if(finished)
+					break;
+			}
+			if(finished)
+				break;
+		}
+		console.log("Finished find similarity phrase");
+		deferred.resolve(phrases);
+	});
+	return deferred.promise;
+}
+
+function calculateSimilarity(predictions,tokens){
+	var calc=0;
+	if(predictions.length == 0)
+		return -1;
+	predictions.forEach(function(pred,idx){
+		var ind = tokens.indexOf(pred.label);
+		if(ind != -1){
+			calc+=1.0;
+			if(ind == idx){
+				calc+=1.0;
+			}
+		}
+	});
+	calc -= Math.abs(predictions.length - tokens.length)*0.5;
+	return calc;
+}
+
 loadSettings()
 
 // .then(SaveAllDiagnosis);
@@ -629,15 +891,16 @@ loadSettings()
 // 	 setTimeout(generatingTokens,2000);
 // });
 
+.then(initClassifier)
+
 // .then(buildSymptonResultList);
 
-.then(callTensorFlow);
-
-// .then(initClassifier)
-// .then(function(){
-// 	 console.log("GO AHEAD: Gol de Cabeça!");
-// });
+.then(callTensorFlow)
+.then(function(){
+	console.log("GO AHEAD: Gol de Cabeça!");
+});
 
 // .then(resetingTokens);
+
 
 
