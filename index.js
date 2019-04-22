@@ -382,7 +382,7 @@ app.get('/predictfromfile/', function(req, res) {
 			var length = phrases.length;
 			rawData[0].resultList.splice(length,rawData[0].resultList.length - length);
 			esperadoF.splice(length,esperadoF.length - length);
-
+			console.log(diag);
 			res.render('predict',{esperadoF:esperadoF,esperadoT:rawData[0].resultList,resultadoF:phrases,resultadoT:toks});
 		});
 	});
@@ -709,12 +709,11 @@ function buildSymptonResultList(){
 function buildSRList(diagP){
 	var deferred = promise.defer();
 
-	MongoUtils.getAllDiagnosis()
+	MongoUtils.getAllDiagnosisTokenLists()
 	.then(function(diagnosis){
 		var diagnosisList=[];
 		console.log("Starting looking for diagnosis attribute");
 		diagnosis.forEach(function(diag,idx){
-			console.log("Diagnostico: "+idx);
 			var startDiag=false;
 			var tokenList = [];
 			diag.tokenList.forEach(function(lineTokens,idxLine){
@@ -835,7 +834,7 @@ function findPhrase(predictions){
 		phrases.push(str);
 	});
 
-	MongoUtils.getAllDiagnosis()
+	MongoUtils.getAllDiagnosisPhrases()
 	.then(function(diagnosis){
 		var finished=false;
 		for(var i=0;i < diagnosis.length;i++){
