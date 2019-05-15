@@ -902,30 +902,58 @@ function buildSRList(diagP){
 
 	MongoUtils.getAllDiagnosisTokenLists()
 	.then(function(diagnosis){
-		createFileTokenList()
-		.then(function(diagnosisList){
-		
-			diagP.symptomList = [];
-			diagP.resultList = [];
-			diagP.tokenList.forEach(function(lineTokens){
+		var diagnosisList=[];
+		console.log("Starting looking for diagnosis attribute");
+		diagnosis.forEach(function(diag,idx){
+			var startDiag=false;
+			var tokenList = [];
+			diag.tokenList.forEach(function(lineTokens,idxLine){
+				tokenList.push({tokens:lineTokens,val:diag.vtokenList[idxLine]});
+			});
+			tokenList.sort(function(a,b){
+				if(a.val > b.val) return -1;
+				else if(a.val < b.val) return 1;
+				else return 0;
+			});
+
+			tokenList.forEach(function(item){
 				var tokens = [];
-				lineTokens.forEach(function(tok){
-					if(tok != "diagnostico" && tok != "meta"){
+				item.tokens.forEach(function(tok){
+					if(tok == "diagnostico"){
+						startDiag=true;
+					}else if(tok != "meta"){
 						tokens.push(tok);
 					}
 				});
 				
-				if(!hasOnlyAuxTokens(tokens)){
-					
-					if(hasList(diagnosisList,tokens)){
-						diagP.resultList.push(tokens);
-					}else{
-						diagP.symptomList.push(tokens);
-					}		
-				}		
-			});	
-			deferred.resolve(diagP);
+				if(startDiag && tokens.length > 0){
+					if(!hasList(diagnosisList,tokens))
+						diagnosisList.push(tokens);
+				}
+			});		
 		});
+		
+		diagP.symptomList = [];
+		diagP.resultList = [];
+		diagP.tokenList.forEach(function(lineTokens){
+			var tokens = [];
+			lineTokens.forEach(function(tok){
+				if(tok != "diagnostico" && tok != "meta"){
+					tokens.push(tok);
+				}
+			});
+			
+			if(!hasOnlyAuxTokens(tokens)){
+				
+				if(hasList(diagnosisList,tokens)){
+					diagP.resultList.push(tokens);
+					diagP.symptomList.push(tokens);
+				}else{
+					diagP.symptomList.push(tokens);
+				}		
+			}		
+		});	
+		deferred.resolve(diagP);
 	});
 
 	return deferred.promise;
@@ -1050,21 +1078,21 @@ loadSettings()
 // .then(SaveAllDiagnosis);
 
 //ETAPA 2 - Gerando Tokens (5 MIN + 30 MIN)
-// .then(initClassifier)
-// .then(function(){
-// 	 setTimeout(generatingTokens,2000);
-// });
+.then(initClassifier)
+.then(function(){
+	 setTimeout(generatingTokens,2000);
+});
 
 //ETAPA 3 - Classificando Sintomas e Diagnósticos (5 MIN + Rápido)
 // .then(initClassifier)
 // .then(buildSymptonResultListBasedOnFile);
 
 //ETAPA 4 - Software Rodando (5 MIN + 15~ MIN + ready)
-.then(initClassifier)
-.then(callTensorFlow)
-.then(function(){
-	console.log("READY!");
-});
+// .then(initClassifier)
+// .then(callTensorFlow)
+// .then(function(){
+// 	console.log("READY!");
+// });
 
 
 // .then(buildSymptonResultList);

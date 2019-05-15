@@ -1,0 +1,232 @@
+block title
+    title Token Classifier
+
+block content
+    script(src="https://cdn.socket.io/socket.io-1.4.5.js")
+    script.
+        var socket = io.connect('http://localhost:5001/');
+
+        function getChildrenById(node,id){
+            for(var i=0;i<node.childNodes.length;i++){
+                if(node.childNodes[i].getAttribute("id") == id){
+                    return node.childNodes[i];
+                }
+            }
+            return null;
+        }
+
+        function cutPhrase(idx1,idx2,phrase){
+            
+            var split = phrase.split(" ");
+            var newPhrase = "";
+            for(var i=idx1-1;i<idx2;i++){
+                newPhrase += split[i]+" ";
+            }
+            newPhrase.length = newPhrase.length -1; 
+            return newPhrase;
+        }
+
+        function lessLowIndex(diagId,phraseIdx,token){
+            var diagDOM = document.getElementById(diagId);
+            var phraseDOM = getChildrenById(diagDOM,phraseIdx);
+            var cutsDOM = getChildrenById(phraseDOM,"cuts");
+            var phrasesDOM = getChildrenById(cutsDOM,"phrases");
+            var cutPhraseToken = getChildrenById(phrasesDOM,token);
+            var idx1DOM = getChildrenById(cutPhraseToken,"idx1");
+            var idx2DOM = getChildrenById(cutPhraseToken,"idx2");
+            var cutPhraseDOM = getChildrenById(cutPhraseToken,"editable");
+
+            var phrase = getChildrenById(phraseDOM,"phrase").innerText;
+
+            var idx1 = idx1DOM.value;
+            var idx2 = idx2DOM.value;
+
+            if(idx1 > 1)idx1--;
+            idx1DOM.value = idx1;
+
+            cutPhraseDOM.innerText = cutPhrase(idx1,idx2,phrase);
+        }
+        function moreLowIndex(diagId,phraseIdx,token){
+            var diagDOM = document.getElementById(diagId);
+            var phraseDOM = getChildrenById(diagDOM,phraseIdx);
+            var cutsDOM = getChildrenById(phraseDOM,"cuts");
+            var phrasesDOM = getChildrenById(cutsDOM,"phrases");
+            var cutPhraseToken = getChildrenById(phrasesDOM,token);
+            var idx1DOM = getChildrenById(cutPhraseToken,"idx1");
+            var idx2DOM = getChildrenById(cutPhraseToken,"idx2");
+            var cutPhraseDOM = getChildrenById(cutPhraseToken,"editable");
+
+            var phrase = getChildrenById(phraseDOM,"phrase").innerText;
+
+            var idx1 = idx1DOM.value;
+            var idx2 = idx2DOM.value;
+
+            if(idx1 < idx2)idx1++;
+            idx1DOM.value = idx1;
+            
+            cutPhraseDOM.innerText = cutPhrase(idx1,idx2,phrase);
+        }
+        function lesshighIndex(diagId,phraseIdx,token){
+            var diagDOM = document.getElementById(diagId);
+            var phraseDOM = getChildrenById(diagDOM,phraseIdx);
+            var cutsDOM = getChildrenById(phraseDOM,"cuts");
+            var phrasesDOM = getChildrenById(cutsDOM,"phrases");
+            var cutPhraseToken = getChildrenById(phrasesDOM,token);
+            var idx1DOM = getChildrenById(cutPhraseToken,"idx1");
+            var idx2DOM = getChildrenById(cutPhraseToken,"idx2");
+            var cutPhraseDOM = getChildrenById(cutPhraseToken,"editable");
+
+            var phrase = getChildrenById(phraseDOM,"phrase").innerText;
+
+            var idx1 = idx1DOM.value;
+            var idx2 = idx2DOM.value;
+
+            if(idx2 > idx1)idx2--;
+            idx2DOM.value = idx2;
+
+            cutPhraseDOM.innerText = cutPhrase(idx1,idx2,phrase);
+        }
+        function moreHighIndex(diagId,phraseIdx,token){
+            var diagDOM = document.getElementById(diagId);
+            var phraseDOM = getChildrenById(diagDOM,phraseIdx);
+            var cutsDOM = getChildrenById(phraseDOM,"cuts");
+            var phrasesDOM = getChildrenById(cutsDOM,"phrases");
+            var cutPhraseToken = getChildrenById(phrasesDOM,token);
+            var idx1DOM = getChildrenById(cutPhraseToken,"idx1");
+            var idx2DOM = getChildrenById(cutPhraseToken,"idx2");
+            var cutPhraseDOM = getChildrenById(cutPhraseToken,"editable");
+
+            var phrase = getChildrenById(phraseDOM,"phrase").innerText;
+
+            var idx1 = idx1DOM.value;
+            var idx2 = idx2DOM.value;
+
+            if(idx2 < phrase.split(" ").length)idx2++;
+            idx2DOM.value = idx2;
+
+            cutPhraseDOM.innerText = cutPhrase(idx1,idx2,phrase);
+        }
+
+        function checkboxChanged(diagId,phraseIdx,token){
+            var diagDOM = document.getElementById(diagId);
+            var phraseDOM = getChildrenById(diagDOM,phraseIdx);
+            var tokenDOM = getChildrenById(phraseDOM,token);
+
+            var cutsDOM = getChildrenById(phraseDOM,"cuts");
+            var tokensDOM = getChildrenById(cutsDOM,"tokens");
+            var phrasesDOM = getChildrenById(cutsDOM,"phrases");
+            if(tokenDOM.checked){
+                var div1 = document.createElement("div");
+                div1.id = token;  
+                var color = "";
+                if(tokensDOM.childNodes.length % 2 == 0)
+                    color = "background: dimgray;";
+                div1.setAttribute( "style", "height: 100%;"+color );
+
+                var p1 = document.createElement("spam");
+                p1.innerText = token;
+                div1.appendChild(p1);
+
+                var div2 = document.createElement("div");
+                div2.id = token;
+                //- div1.setAttribute( "style", ""+color );
+
+
+                var button1 = document.createElement("button");
+                button1.setAttribute( "onClick", "lessLowIndex('"+diagId+"','"+phraseIdx+"','"+token+"')" );
+                button1.setAttribute( "style", "height: 100%;width: 100px;" );
+                button1.innerText = "<"; 
+                div2.appendChild(button1);
+
+                var button2 = document.createElement("button");
+                button2.setAttribute( "onClick", "moreLowIndex('"+diagId+"','"+phraseIdx+"','"+token+"')" );
+                button2.setAttribute( "style", "height: 100%;width: 100px;" );
+                button2.innerText = ">"; 
+                div2.appendChild(button2);
+
+                var idx1 = document.createElement("spam");
+                idx1.id = "idx1";
+                idx1.value = 1;
+                div2.appendChild(idx1);
+
+                var p2 = document.createElement("spam");
+                p2.id = "editable";
+                p2.innerText = getChildrenById(phraseDOM,"phrase").innerText;
+                p2.setAttribute( "style", "display: inline-block;width: 50%;" );
+                div2.appendChild(p2);
+
+                var idx2 = document.createElement("spam");
+                idx2.id = "idx2";
+                idx2.value = getChildrenById(phraseDOM,"phrase").innerText.split(" ").length;
+                div2.appendChild(idx2);
+
+                var button4 = document.createElement("button");
+                button4.setAttribute( "onClick", "moreHighIndex('"+diagId+"','"+phraseIdx+"','"+token+"')" );
+                button4.setAttribute( "style", "float: right;height: 100%;width: 100px;" );
+                button4.innerText = ">"; 
+                div2.appendChild(button4);
+
+                var button3 = document.createElement("button");
+                button3.setAttribute( "onClick", "lesshighIndex('"+diagId+"','"+phraseIdx+"','"+token+"')" );
+                button3.setAttribute( "style", "float: right;height: 100%;width: 100px;" );
+                button3.innerText = "<"; 
+                div2.appendChild(button3);
+
+
+                tokensDOM.appendChild(div1);
+                phrasesDOM.appendChild(div2);
+            }else{
+                getChildrenById(tokensDOM,token).remove();
+                getChildrenById(phrasesDOM,token).remove();
+            }
+        }
+
+        function add(diagId,phraseIdx){
+            var diagDOM = document.getElementById(diagId);
+            var phraseDOM = getChildrenById(diagDOM,phraseIdx);
+            var cutsDOM = getChildrenById(phraseDOM,"cuts");
+            var phrasesDOM = getChildrenById(cutsDOM,"phrases");
+            var tokensDOM = getChildrenById(cutsDOM,"tokens");
+            var messageDOM = getChildrenById(phraseDOM,"message");
+
+            var result = [];
+            for(var i=0;i<tokensDOM.childNodes.length;i++){
+                result[i] = {};
+                result[i].token = tokensDOM.childNodes[i].getAttribute("id");
+                result[i].phrase = getChildrenById(phrasesDOM.childNodes[i],"editable").innerText;
+            }
+            messageDOM.innerText = "Added "+result.length+" new rows!";
+            socket.emit('sendClassification', JSON.stringify(result));
+        }
+    div
+        for diag in diagnosis
+            - var color="beige";
+            <div id="#{diag._id}" style="background:#{color};">
+                
+                for line,index in diag.result
+                    - var linecolorRes="darkgray";
+                    - if(line.maxValue > 0.9 || line.sum > 0.9) linecolorRes="green";
+                    - else if(line.maxValue > 0.7 || line.sum > 0.7) linecolorRes="lightgreen";
+                    div(id=index style="background: "+linecolorRes+";padding: 20px 0px;")
+                        p(id="phrase" style="outline-style: dashed;") #{ line.phrase }
+                        table(style="width: 100%;display: table;table-layout: fixed;border-style: solid;border-color: coral;")
+                            <tr>
+                            for res,idxTok in line.tokens
+                                - var itemcolor="darkgray";
+                                - if(res.value > 0.7) itemcolor="lightgreen";
+                                - if(res.value > 0.9) itemcolor="green";
+                                if idxTok % 5 == 0
+                                    </tr><tr> 
+                                td(style="display: table-cell;text-align: center;background:"+itemcolor+";") #{res.label} - #{Math.floor(res.value*1000)/1000} 
+                            </tr>        
+                        for token in tokens
+                            <input id="#{token}" type='checkbox' style="width: 40px;height: 40px;" onclick="checkboxChanged('#{diag._id}','#{index}','#{ token }')"><spam> #{ token } </spam></input>
+                        div(id="cuts" style="height: 100px;")
+                            div(id="tokens" style="float: left;padding: 0px 10px;")
+                            div(id="phrases")
+                        <button onclick="add('#{diag._id}','#{index}')" style="width: 100%;height: 80px;">ADD</button>
+                        p(id="message")
+                        hr
+                hr
+                hr
+            </div>
