@@ -152,6 +152,60 @@ app.get('/lowclassify/', function(req, res) {
 	});
 	
 });
+app.get('/fileclassify/', function(req, res) {
+	var diagnosisPage=[];
+	var diag ={};
+	diag._id = "idTeste";
+	diag.result=[];
+	loadExDiags()
+	.then(function(diags){
+
+		diags.forEach(function(line,idxLine){
+			if(line.match(/[A-Za-z]/i) == null){
+				console.log("Empty phrase");
+				return;
+			}
+			var phrase = line;
+			line = {};
+			line.phrase = phrase;
+			line.tokens = [];
+			var classifications = classifier.getClassifications(phrase);
+			var sum=0;
+			var count=0;
+			var media=0;
+			classifications.forEach(function(classification){
+				if( classification.value > 0.1){
+					count++;
+					media+=classification.value;
+				}
+			});
+			if(count > 0)
+				media /= count;
+
+			classifications.forEach(function(classification){
+				if( classification.value > 0.1){
+					if(count <= 10 || (classification.value - media)/media > 0.4 ){
+						sum+=classification.value;
+						line.tokens.push({label:classification.label,value:classification.value});
+					}
+				}
+			});
+			line.maxValue = classifications[0].value;
+			line.sum = sum;
+
+			diag.result.push(line);	
+			console.log("line"+idxLine);		
+		});
+		if(diag.result.length > 0){
+			diagnosisPage.push(diag);
+		}
+
+		res.render('fileclassify',{diagnosis:diagnosisPage,tokens:settings.allTokens });
+
+	});
+	
+	
+});
 app.get('/print/', function(req, res) {
 	MongoUtils.getAllDiagnosis()
 	.then(function(diagnosis){
@@ -461,6 +515,23 @@ function saveSettings(){
 	return deferred.promise;
 }
 
+function loadExDiags(){
+	var deferred = promise.defer();
+	var diags=[];
+	try{
+		diags = (fs.readFileSync("./data/Diagnosticos.txt"))+"";
+		diags = diags.split('\r\n');
+		console.log("Ex diags loaded");
+		deferred.resolve(diags);
+	} catch (err){
+		
+		console.error('Error opening Diagnosticos.txt file: '+err);
+		deferred.resolve([]);
+	}
+
+	return deferred.promise;
+}
+
 var diagnosis = [];
 var count=0;
 function SaveAllDiagnosis(){
@@ -546,10 +617,23 @@ function generatingTokens(){
 					var lineTokens=[];
 					var sum=0;
 					var classifications = classifier.getClassifications(line);
+					var count=0;
+					var media=0;
 					classifications.forEach(function(classification){
-						if( (classifications[0].value - classification.value)/classifications[0].value < 0.4){
-							lineTokens.push(classification.label);
-							sum +=classification.value;
+						if( classification.value > 0.1){
+							count++;
+							media+=classification.value;
+						}
+					});
+					if(count > 0)
+						media /= count;
+		
+					classifications.forEach(function(classification){
+						if( classification.value > 0.1){
+							if(count <= 10 || (classification.value - media)/media > 0.5 ){
+								lineTokens.push(classification.label);
+								sum +=classification.value;
+							}
 						}
 					});
 					vtokenList.push(sum);
@@ -581,10 +665,23 @@ function generateTokens(resultadoTxt){
 		var lineTokens=[];
 		var sum=0;
 		var classifications = classifier.getClassifications(line);
+		var count=0;
+		var media=0;
 		classifications.forEach(function(classification){
-			if( (classifications[0].value - classification.value)/classifications[0].value < 0.4){
-				lineTokens.push(classification.label);
-				sum +=classification.value;
+			if( classification.value > 0.1){
+				count++;
+				media+=classification.value;
+			}
+		});
+		if(count > 0)
+			media /= count;
+
+		classifications.forEach(function(classification){
+			if( classification.value > 0.1){
+				if(count <= 10 || (classification.value - media)/media > 0.5 ){
+					lineTokens.push(classification.label);
+					sum +=classification.value;
+				}
 			}
 		});
 		vtokenList.push(sum);
@@ -700,6 +797,100 @@ function buildSymptonResultList(){
 		q.start(function(err) {
 			console.log('Finished building symptomList and resultList');
 			deferred.resolve();
+		});
+	});
+
+	return deferred.promise;
+}
+
+function createFileTokenList(){
+	var deferred = promise.defer();
+
+	var result = [];
+	loadExDiags()
+	.then(function(diags){
+
+		diags.forEach(function(line,idxLine){
+			if(line.match(/[A-Za-z]/i) == null){
+				console.log("Empty phrase");
+				return;
+			}
+			var phrase = line;
+			line = {};
+			line.tokens = [];
+			var classifications = classifier.getClassifications(phrase);
+			var count=0;
+			var media=0;
+			classifications.forEach(function(classification){
+				if( classification.value > 0.1){
+					count++;
+					media+=classification.value;
+				}
+			});
+			if(count > 0)
+				media /= count;
+
+			classifications.forEach(function(classification){
+				if( classification.value > 0.1){
+					if(count <= 10 || (classification.value - media)/media > 0.4 ){
+						if(classification.label != "diagnostico" && classification.label != "meta")
+							line.tokens.push(classification.label);
+					}
+				}
+			});
+
+			result.push(line.tokens);			
+		});
+		deferred.resolve(result);
+	});
+
+	return deferred.promise;
+}
+
+function buildSymptonResultListBasedOnFile(){
+	var deferred = promise.defer();
+
+	MongoUtils.getAllDiagnosis()
+	.then(function(diagnosis){
+		createFileTokenList()
+		.then(function(diagnosisList){
+			var q = queue();
+			q.timeout = 100;
+			q.concurrency = 1;
+			
+			console.log("Starting building symptomList and resultList");
+			diagnosis.forEach(function(diag,idx){
+				q.push(function(cb) {
+					console.log("Diagnostico: "+idx);
+					diag.symptomList = [];
+					diag.resultList = [];
+					diag.tokenList.forEach(function(lineTokens){
+						var tokens = [];
+						lineTokens.forEach(function(tok){
+							if(tok != "diagnostico" && tok != "meta"){
+								tokens.push(tok);
+							}
+						});
+						
+						if(!hasOnlyAuxTokens(tokens)){
+							
+							if(hasList(diagnosisList,tokens)){
+								diag.resultList.push(tokens);
+							}else{
+								diag.symptomList.push(tokens);
+							}		
+						}		
+					});		
+					MongoUtils.UpdateDiagnosis(diag)
+					.then(function(res){
+						cb();
+					});
+				});		
+			});		
+			q.start(function(err) {
+				console.log('Finished building symptomList and resultList');
+				deferred.resolve();
+			});
 		});
 	});
 
@@ -893,6 +1084,7 @@ loadSettings()
 .then(initClassifier)
 
 // .then(buildSymptonResultList);
+// .then(buildSymptonResultListBasedOnFile);
 
 .then(callTensorFlow)
 .then(function(){
